@@ -12,6 +12,29 @@ const credential: BiliCredential = {
 };
 
 describe("BiliClient", () => {
+  it("validates credentials for read and write modes", async () => {
+    const getJson = vi
+      .fn()
+      .mockResolvedValueOnce({ isLogin: true })
+      .mockResolvedValueOnce({ isLogin: false });
+    const client = new BiliClient({ getJson, getSignedJson: vi.fn(), getText: vi.fn(), postJson: vi.fn(), postJsonBody: vi.fn() });
+
+    await expect(client.validateCredential(credential, "read")).resolves.toBe("valid");
+    await expect(client.validateCredential(credential, "write")).resolves.toBe("invalid");
+  });
+
+  it("returns indeterminate when credential validation request fails", async () => {
+    const client = new BiliClient({
+      getJson: vi.fn().mockRejectedValue(new Error("boom")),
+      getSignedJson: vi.fn(),
+      getText: vi.fn(),
+      postJson: vi.fn(),
+      postJsonBody: vi.fn(),
+    });
+
+    await expect(client.validateCredential(credential, "read")).resolves.toBe("indeterminate");
+  });
+
   it("fetches subtitle text through view -> player -> subtitle url", async () => {
     const getJson = vi
       .fn()
@@ -224,5 +247,41 @@ describe("BiliClient", () => {
       expect.objectContaining({ bvid: "BV1ABcsztEcY", cid: 99, fnval: 4048 }),
       expect.anything(),
     );
+  });
+
+  it("falls back to durl when dash audio streams are unavailable", async () => {
+    const getJson = vi
+      .fn()
+      .mockResolvedValueOnce({
+        aid: 123,
+        bvid: "BV1ABcsztEcY",
+        cid: 99,
+        title: "测试视频",
+        duration: 120,
+        pages: [{ cid: 99 }],
+      })
+      .mockResolvedValueOnce({
+        durl: [{ url: "//example.com/audio-fallback.mp4" }],
+      });
+    const client = new BiliClient({ getJson, getSignedJson: vi.fn(), getText: vi.fn(), postJson: vi.fn(), postJsonBody: vi.fn() });
+
+    await expect(client.getAudioDownloadInfo("BV1ABcsztEcY", credential)).resolves.toEqual({
+      bvid: "BV1ABcsztEcY",
+      duration: 120,
+      title: "测试视频",
+      url: "https://example.com/audio-fallback.mp4",
+    });
+  });
+
+  it("rejects audio download when cid is missing", async () => {
+    const client = new BiliClient({
+      getJson: vi.fn().mockResolvedValue({ aid: 123, bvid: "BV1ABcsztEcY", title: "测试视频", duration: 120 }),
+      getSignedJson: vi.fn(),
+      getText: vi.fn(),
+      postJson: vi.fn(),
+      postJsonBody: vi.fn(),
+    });
+
+    await expect(client.getAudioDownloadInfo("BV1ABcsztEcY", credential)).rejects.toThrow("缺少 cid");
   });
 });

@@ -8,6 +8,17 @@ import { AuthenticationError } from "../src/core/errors.js";
 import { createCli, runCli } from "../src/cli.js";
 import type { BiliCredential } from "../src/core/types.js";
 
+const readlineMocks = vi.hoisted(() => {
+  const question = vi.fn();
+  const close = vi.fn();
+  const createInterface = vi.fn(() => ({ question, close }));
+  return { question, close, createInterface };
+});
+
+vi.mock("node:readline/promises", () => ({
+  createInterface: readlineMocks.createInterface,
+}));
+
 const credential: BiliCredential = {
   uid: 123,
   source: "browser",
@@ -339,6 +350,18 @@ describe("runCli", () => {
     expect(JSON.parse(stdout.join(""))).toMatchObject({ status: "ok", fid: 946974 });
   });
 
+  it("cancels unfollow when confirmation is rejected", async () => {
+    const { runtime, stdout } = createRuntime();
+    readlineMocks.question.mockResolvedValueOnce("n");
+
+    const exitCode = await runCli(["interact", "unfollow", "946974"], runtime);
+
+    expect(exitCode).toBe(0);
+    expect(runtime.api.unfollowUser).not.toHaveBeenCalled();
+    expect(stdout.join("")).toContain("已取消操作");
+    expect(readlineMocks.close).toHaveBeenCalled();
+  });
+
   it("returns an auth error for interact commands without credentials", async () => {
     const { runtime, stderr } = createRuntime();
     runtime.auth.requireCredential.mockRejectedValueOnce(new AuthenticationError("需要写权限登录"));
@@ -453,6 +476,19 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(JSON.parse(stdout.join(""))).toMatchObject({ status: "ok", dynamic_id: dynamicId });
+  });
+
+  it("cancels delete when confirmation is rejected", async () => {
+    const { runtime, stdout } = createRuntime();
+    const dynamicId = "1176582818784870400";
+    readlineMocks.question.mockResolvedValueOnce("n");
+
+    const exitCode = await runCli(["timeline", "delete", dynamicId], runtime);
+
+    expect(exitCode).toBe(0);
+    expect(runtime.api.deleteDynamic).not.toHaveBeenCalled();
+    expect(stdout.join("")).toContain("已取消删除");
+    expect(readlineMocks.close).toHaveBeenCalled();
   });
 
   it("passes library pagination options through", async () => {

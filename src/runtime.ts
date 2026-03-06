@@ -15,6 +15,37 @@ export interface CliIo {
   writeError(value: string): void;
 }
 
+export type CliApi = Pick<
+  BiliClient,
+  | "coinVideo"
+  | "deleteDynamic"
+  | "getAudioDownloadInfo"
+  | "getFavoriteFolders"
+  | "getFavoriteItems"
+  | "getFeed"
+  | "getFollowing"
+  | "getHistory"
+  | "getHotVideos"
+  | "getMyDynamics"
+  | "getRankVideos"
+  | "getRelatedVideos"
+  | "getRelationStat"
+  | "getSelfInfo"
+  | "getUserInfo"
+  | "getUserVideos"
+  | "getVideoComments"
+  | "getVideoInfo"
+  | "getVideoSubtitle"
+  | "getVideoSummary"
+  | "getWatchLater"
+  | "likeVideo"
+  | "postTextDynamic"
+  | "searchUsers"
+  | "searchVideos"
+  | "tripleVideo"
+  | "unfollowUser"
+>;
+
 export interface CliRuntime {
   auth: {
     getCredential(mode: AuthMode): Promise<BiliCredential | null>;
@@ -22,7 +53,7 @@ export interface CliRuntime {
     login(): Promise<{ credential: BiliCredential; method: "qr" }>;
     logout(): Promise<void>;
   };
-  api: BiliClient;
+  api: CliApi;
   audio: {
     download(info: AudioDownloadInfo, options: AudioDownloadOptions): Promise<AudioDownloadResult>;
   };

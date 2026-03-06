@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { BiliApiError } from "../src/core/errors.js";
 import { BiliHttpClient } from "../src/core/http.js";
 import type { BiliCredential } from "../src/core/types.js";
 
@@ -70,5 +71,42 @@ describe("BiliHttpClient", () => {
         img_url: expect.any(String),
       },
     });
+  });
+
+  it("adds csrf fields for form posts", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 0, data: { ok: true } })));
+    const client = new BiliHttpClient({ fetchImpl, randomId: () => "uuid", now: () => 1710000000000 });
+
+    await expect(client.postJson("/x/web-interface/archive/like", { aid: 123, like: 1 }, { credential })).resolves.toEqual({ ok: true });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = String(init.body);
+    expect(init.method).toBe("POST");
+    expect(init.headers["Content-Type"]).toContain("application/x-www-form-urlencoded");
+    expect(body).toContain("aid=123");
+    expect(body).toContain("like=1");
+    expect(body).toContain("csrf=csrf");
+    expect(body).toContain("csrf_token=csrf");
+  });
+
+  it("sends json bodies for postJsonBody", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 0, data: { ok: true } })));
+    const client = new BiliHttpClient({ fetchImpl, randomId: () => "uuid", now: () => 1710000000000 });
+
+    await expect(client.postJsonBody("/dynamic/create", { content: "hello" }, { credential })).resolves.toEqual({ ok: true });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(init.method).toBe("POST");
+    expect(init.headers["Content-Type"]).toContain("application/json");
+    expect(init.body).toBe(JSON.stringify({ content: "hello" }));
+  });
+
+  it("throws a BiliApiError for non-zero api codes", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: -400, message: "bad request" })),
+    );
+    const client = new BiliHttpClient({ fetchImpl, randomId: () => "uuid", now: () => 1710000000000 });
+
+    await expect(client.getJson("/x/test")).rejects.toBeInstanceOf(BiliApiError);
   });
 });
