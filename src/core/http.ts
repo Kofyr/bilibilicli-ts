@@ -23,6 +23,7 @@ function mergeCookies(baseCookies: Record<string, string>, credential?: BiliCred
   return {
     ...baseCookies,
     ...(credential?.cookies ?? {}),
+    "opus-goback": "1",
   };
 }
 
@@ -49,12 +50,14 @@ function buildHeaders(
   anonymousCookies: Record<string, string>,
   credential: BiliCredential | null | undefined,
   options: RequestOptions,
+  extraHeaders: Record<string, string> = {},
 ) {
   const cookieHeader = toCookieHeader(mergeCookies(anonymousCookies, credential));
   const headers: Record<string, string> = {
     ...DEFAULT_HEADERS,
     Referer: options.referer ?? "https://www.bilibili.com/",
     ...(options.headers ?? {}),
+    ...extraHeaders,
   };
 
   if (cookieHeader) {
@@ -62,6 +65,14 @@ function buildHeaders(
   }
 
   return headers;
+}
+
+function serializeFormValue(value: unknown) {
+  if (Array.isArray(value) || (value !== null && typeof value === "object")) {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }
 
 export class BiliHttpClient implements HttpAdapter {
@@ -109,10 +120,58 @@ export class BiliHttpClient implements HttpAdapter {
     return this.performRequest(url, options);
   }
 
-  private async performRequest(url: URL, options: RequestOptions) {
+  async postJson(pathOrUrl: string, data: Record<string, unknown> = {}, options: RequestOptions = {}) {
+    const url = createUrl(pathOrUrl);
+    const body = new URLSearchParams();
+    const payload: Record<string, unknown> = { ...data };
+    const csrf = options.credential?.cookies?.bili_jct;
+
+    if (csrf) {
+      if (payload.csrf === undefined) {
+        payload.csrf = csrf;
+      }
+      if (payload.csrf_token === undefined) {
+        payload.csrf_token = csrf;
+      }
+    }
+
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined) {
+        body.set(key, serializeFormValue(value));
+      }
+    });
+
+    return this.performRequest(
+      url,
+      options,
+      "POST",
+      body.toString(),
+      { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+    );
+  }
+
+  async postJsonBody(pathOrUrl: string, data: Record<string, unknown> = {}, options: RequestOptions = {}) {
+    const url = createUrl(pathOrUrl);
+    return this.performRequest(
+      url,
+      options,
+      "POST",
+      JSON.stringify(data),
+      { "Content-Type": "application/json; charset=UTF-8" },
+    );
+  }
+
+  private async performRequest(
+    url: URL,
+    options: RequestOptions,
+    method: "GET" | "POST" = "GET",
+    body?: string,
+    extraHeaders: Record<string, string> = {},
+  ) {
     const response = await this.fetchImpl(url, {
-      method: "GET",
-      headers: buildHeaders(this.anonymousCookies, options.credential, options),
+      method,
+      headers: buildHeaders(this.anonymousCookies, options.credential, options, extraHeaders),
+      body,
     });
 
     const payload = await response.json();

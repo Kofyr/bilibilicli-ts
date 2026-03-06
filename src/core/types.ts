@@ -21,6 +21,8 @@ export interface HttpAdapter {
   getJson(pathOrUrl: string, params?: Record<string, unknown>, options?: RequestOptions): Promise<any>;
   getSignedJson(path: string, params?: Record<string, unknown>, options?: RequestOptions): Promise<any>;
   getText(pathOrUrl: string, options?: RequestOptions): Promise<string>;
+  postJson(pathOrUrl: string, data?: Record<string, unknown>, options?: RequestOptions): Promise<any>;
+  postJsonBody(pathOrUrl: string, data?: Record<string, unknown>, options?: RequestOptions): Promise<any>;
 }
 
 export interface AuthStore {

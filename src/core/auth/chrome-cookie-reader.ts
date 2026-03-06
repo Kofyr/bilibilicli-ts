@@ -1,4 +1,10 @@
 const COOKIE_NAMES = ["SESSDATA", "bili_jct", "DedeUserID", "ac_time_value", "buvid3", "buvid4", "_uuid", "b_nut"];
+const BILIBILI_URLS = [
+  "https://www.bilibili.com/",
+  "https://passport.bilibili.com/",
+  "https://space.bilibili.com/",
+  "https://t.bilibili.com/",
+];
 
 type ChromeCookiesSecureModule = {
   getCookiesPromised(uri: string, format: "object", profileOrPath?: string): Promise<Record<string, unknown>>;
@@ -28,7 +34,16 @@ export function createChromeCookieQuery(options: ChromeCookieQueryOptions = {}) 
   return async (): Promise<BrowserCookie[]> => {
     try {
       const chromeCookiesSecure = await loadChromeCookiesSecure();
-      const cookies = await chromeCookiesSecure.getCookiesPromised("https://www.bilibili.com/", "object");
+      const cookieGroups = await Promise.all(
+        BILIBILI_URLS.map(async (url) => {
+          try {
+            return await chromeCookiesSecure.getCookiesPromised(url, "object");
+          } catch {
+            return {};
+          }
+        }),
+      );
+      const cookies = Object.assign({}, ...cookieGroups);
 
       return COOKIE_NAMES.flatMap((name) => {
         const value = cookies[name];

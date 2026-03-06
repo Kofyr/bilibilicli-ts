@@ -6,6 +6,23 @@ export interface UserVideosOptions {
   pageSize: number;
 }
 
+function requireReadCredential(credential: BiliCredential | null | undefined, action: string) {
+  if (!credential?.cookies?.SESSDATA) {
+    throw new AuthenticationError(`${action}需要登录`);
+  }
+
+  return credential;
+}
+
+function requireWriteCredential(credential: BiliCredential | null | undefined, action: string) {
+  const current = requireReadCredential(credential, action);
+  if (!current.cookies.bili_jct) {
+    throw new AuthenticationError(`${action}需要写权限登录`);
+  }
+
+  return current;
+}
+
 function withVideoReferer(bvid: string, credential?: BiliCredential | null): RequestOptions {
   return {
     credential,
@@ -37,6 +54,29 @@ function parseSpacePageProfile(uid: number, html: string) {
 
 export class BiliClient {
   constructor(private readonly http: HttpAdapter) {}
+
+  private async resolveCurrentUserId(credential: BiliCredential) {
+    const me = await this.getSelfInfo(credential);
+    const uid = Number(me?.mid);
+    if (!uid) {
+      throw new AuthenticationError("当前登录信息中缺少 UID");
+    }
+
+    return uid;
+  }
+
+  private async resolveVideoIdentity(bvid: string, credential?: BiliCredential | null) {
+    const view = await this.getVideoInfo(bvid, credential);
+    const aid = Number(view?.aid);
+    if (!aid) {
+      throw new BiliCliError(`视频 ${bvid} 缺少 aid，无法执行写操作`);
+    }
+
+    return {
+      aid,
+      bvid: String(view?.bvid ?? bvid),
+    };
+  }
 
   async validateCredential(credential: BiliCredential, mode: "read" | "write") {
     try {
@@ -261,5 +301,102 @@ export class BiliClient {
     }
 
     return this.http.getJson("/x/polymer/web-dynamic/v1/feed/all", { type: "all", offset }, { credential });
+  }
+
+  async likeVideo(bvid: string, credential: BiliCredential) {
+    const writeCredential = requireWriteCredential(credential, "点赞视频");
+    const identity = await this.resolveVideoIdentity(bvid, writeCredential);
+    return this.http.postJson(
+      "/x/web-interface/archive/like",
+      { ...identity, like: 1 },
+      withVideoReferer(bvid, writeCredential),
+    );
+  }
+
+  async coinVideo(bvid: string, credential: BiliCredential, count = 1) {
+    if (count !== 1 && count !== 2) {
+      throw new BiliCliError("投币数量只能是 1 或 2");
+    }
+
+    const writeCredential = requireWriteCredential(credential, "视频投币");
+    const identity = await this.resolveVideoIdentity(bvid, writeCredential);
+    return this.http.postJson(
+      "/x/web-interface/coin/add",
+      { ...identity, multiply: count, select_like: 0 },
+      withVideoReferer(bvid, writeCredential),
+    );
+  }
+
+  async tripleVideo(bvid: string, credential: BiliCredential) {
+    const writeCredential = requireWriteCredential(credential, "一键三连");
+    const identity = await this.resolveVideoIdentity(bvid, writeCredential);
+    return this.http.postJson(
+      "/x/web-interface/archive/like/triple",
+      identity,
+      withVideoReferer(bvid, writeCredential),
+    );
+  }
+
+  async unfollowUser(uid: number, credential: BiliCredential) {
+    const writeCredential = requireWriteCredential(credential, "取消关注");
+    return this.http.postJson(
+      "/x/relation/modify",
+      { fid: uid, act: 2, re_src: 11 },
+      {
+        credential: writeCredential,
+        referer: `https://space.bilibili.com/${uid}`,
+        headers: {
+          Origin: "https://space.bilibili.com",
+        },
+      },
+    );
+  }
+
+  async getMyDynamics(credential: BiliCredential, offset = 0, needTop = false) {
+    const readCredential = requireReadCredential(credential, "获取我的动态");
+    const uid = await this.resolveCurrentUserId(readCredential);
+
+    return this.http.getJson(
+      "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history",
+      { host_uid: uid, offset_dynamic_id: offset, need_top: needTop ? 1 : 0 },
+      { credential: readCredential },
+    );
+  }
+
+  async postTextDynamic(text: string, credential: BiliCredential) {
+    const content = text.trim();
+    if (!content) {
+      throw new BiliCliError("动态文本不能为空");
+    }
+
+    const writeCredential = requireWriteCredential(credential, "发布动态");
+    return this.http.postJson(
+      "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/create",
+      {
+        dynamic_id: 0,
+        type: 4,
+        rid: 0,
+        content,
+        extension: JSON.stringify({ emoji_type: 1 }),
+        at_uids: "",
+        ctrl: [],
+      },
+      {
+        credential: writeCredential,
+        referer: "https://t.bilibili.com/",
+        headers: {
+          Origin: "https://t.bilibili.com",
+        },
+      },
+    );
+  }
+
+  async deleteDynamic(dynamicId: string, credential: BiliCredential) {
+    const writeCredential = requireWriteCredential(credential, "删除动态");
+    return this.http.postJson(
+      "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/rm_dynamic",
+      { dynamic_id: dynamicId },
+      { credential: writeCredential },
+    );
   }
 }

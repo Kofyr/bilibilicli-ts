@@ -66,6 +66,56 @@ function getDisplayName(info: Record<string, unknown>) {
   return String(info.uname ?? info.name ?? "unknown");
 }
 
+function parseJsonObject(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, any>;
+  }
+
+  if (typeof value !== "string") {
+    return {} as Record<string, any>;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, any>;
+    }
+  } catch {
+    return {} as Record<string, any>;
+  }
+
+  return {} as Record<string, any>;
+}
+
+function extractDynamicId(item: Record<string, any>) {
+  const desc = parseJsonObject(item.desc);
+  return String(desc.dynamic_id_str ?? item.id_str ?? desc.dynamic_id ?? item.id ?? "");
+}
+
+function extractDynamicText(item: Record<string, any>) {
+  const modules = parseJsonObject(item.modules);
+  const card = parseJsonObject(item.card);
+  return cleanText(
+    modules.module_dynamic?.desc?.text
+      ?? card.item?.content
+      ?? card.item?.description
+      ?? card.title
+      ?? card.description
+      ?? card.dynamic
+      ?? "",
+  );
+}
+
+function extractDynamicTime(item: Record<string, any>) {
+  const desc = parseJsonObject(item.desc);
+  const timestamp = Number(desc.timestamp ?? 0);
+  if (!timestamp) {
+    return "-";
+  }
+
+  return new Date(timestamp * 1000).toISOString().slice(5, 16).replace("T", " ");
+}
+
 function renderVideoInfo(io: CliRuntime["io"], info: Record<string, any>, extras: {
   subtitle?: string;
   summary?: string;
@@ -337,6 +387,49 @@ export function createCli(runtime: CliRuntime) {
       write(runtime.io, toTable(["BV", "标题", "UP", "播放"], rows));
     });
 
+  const interact = program.command("interact").description("互动命令");
+  interact
+    .command("like")
+    .argument("<bvidOrUrl>", "BV 号或视频 URL")
+    .action(async (bvidOrUrl) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const bvid = extractBvid(String(bvidOrUrl));
+      await runtime.api.likeVideo(bvid, credential);
+      write(runtime.io, `已点赞: ${bvid}`);
+    });
+
+  interact
+    .command("coin")
+    .argument("<bvidOrUrl>", "BV 号或视频 URL")
+    .option("--count <count>", "投币数量", "1")
+    .action(async (bvidOrUrl, options) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const bvid = extractBvid(String(bvidOrUrl));
+      const count = Number(options.count);
+      await runtime.api.coinVideo(bvid, credential, count);
+      write(runtime.io, `已投 ${count} 枚硬币: ${bvid}`);
+    });
+
+  interact
+    .command("triple")
+    .argument("<bvidOrUrl>", "BV 号或视频 URL")
+    .action(async (bvidOrUrl) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const bvid = extractBvid(String(bvidOrUrl));
+      await runtime.api.tripleVideo(bvid, credential);
+      write(runtime.io, `一键三连成功: ${bvid}`);
+    });
+
+  interact
+    .command("unfollow")
+    .argument("<uid>", "用户 UID")
+    .action(async (uidInput) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const uid = Number(uidInput);
+      await runtime.api.unfollowUser(uid, credential);
+      write(runtime.io, `已取消关注: ${uid}`);
+    });
+
   const timeline = program.command("timeline").description("时间线命令");
   timeline
     .command("feed")
@@ -357,6 +450,54 @@ export function createCli(runtime: CliRuntime) {
         cleanText(item.modules?.module_dynamic?.desc?.text ?? ""),
       ]);
       write(runtime.io, toTable(["ID", "作者", "内容"], rows));
+    });
+
+  timeline
+    .command("mine")
+    .option("--json", "输出 JSON")
+    .action(async (options) => {
+      const credential = await runtime.auth.requireCredential("read");
+      const data = await runtime.api.getMyDynamics(credential);
+      if (options.json) {
+        toJson(runtime.io, data);
+        return;
+      }
+
+      const rows = toArray<Record<string, any>>(data, "cards").map((item) => [
+        extractDynamicId(item),
+        extractDynamicTime(item),
+        extractDynamicText(item),
+      ]);
+      write(runtime.io, toTable(["ID", "时间", "内容"], rows));
+    });
+
+  timeline
+    .command("post")
+    .argument("<text>", "动态文本")
+    .action(async (text) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const content = String(text).trim();
+      if (!content) {
+        throw new BiliCliError("动态文本不能为空");
+      }
+
+      const data = await runtime.api.postTextDynamic(content, credential);
+      const dynamicId = data?.dynamic_id_str ?? data?.dyn_id_str ?? data?.dynamic_id ?? data?.dyn_id;
+      write(runtime.io, dynamicId ? `已发布动态: ${dynamicId}` : "已发布动态");
+    });
+
+  timeline
+    .command("delete")
+    .argument("<id>", "动态 ID")
+    .action(async (idInput) => {
+      const credential = await runtime.auth.requireCredential("write");
+      const dynamicId = String(idInput).trim();
+      if (!/^\d+$/.test(dynamicId)) {
+        throw new BiliCliError(`动态 ID 非法: ${idInput}`);
+      }
+
+      await runtime.api.deleteDynamic(dynamicId, credential);
+      write(runtime.io, `已删除动态: ${dynamicId}`);
     });
 
   const library = program.command("library").description("收藏与历史");

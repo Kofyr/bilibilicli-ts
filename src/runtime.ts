@@ -1,4 +1,5 @@
-import envPaths from "env-paths";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 import { AuthService } from "./core/auth/auth-service.js";
 import { BrowserCredentialImporter } from "./core/auth/browser-importer.js";
@@ -24,13 +25,13 @@ export interface CliRuntime {
   io: CliIo;
 }
 
-function resolveCredentialPath() {
+export function resolveCredentialPath() {
   const envPath = process.env.BILI_TS_CREDENTIAL_PATH;
   if (envPath) {
     return envPath;
   }
 
-  return `${envPaths("bili-ts").config}/credential.json`;
+  return join(homedir(), ".bilibili-cli", "credential.json");
 }
 
 export function createDefaultRuntime(): CliRuntime {
