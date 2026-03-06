@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - '@primno/dpapi'
+  - better-sqlite3
+  - esbuild
+  - keytar
+  - sqlite3
+  - tldjs

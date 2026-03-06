@@ -1,0 +1,38 @@
+{
+  "name": "bilibili-cli-ts",
+  "version": "0.1.0",
+  "description": "Bilibili CLI implemented in TypeScript",
+  "type": "module",
+  "bin": {
+    "bili-ts": "dist/bin.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/bin.ts"
+  },
+  "dependencies": {
+    "chrome-cookies-secure": "^3.0.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.1",
+    "env-paths": "^3.0.0",
+    "picocolors": "^1.1.1",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@10.30.3"
+}
