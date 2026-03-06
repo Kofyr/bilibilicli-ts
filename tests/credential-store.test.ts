@@ -52,7 +52,7 @@ describe("CredentialStore", () => {
     });
   });
 
-  it("loads python-style credential files", async () => {
+  it("loads compatible credential files", async () => {
     const store = await makeStore();
     const text = JSON.stringify({
       sessdata: "sess",

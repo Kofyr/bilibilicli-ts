@@ -6,6 +6,18 @@ export interface UserVideosOptions {
   pageSize: number;
 }
 
+export interface HistoryOptions {
+  page: number;
+  pageSize: number;
+}
+
+export interface AudioDownloadInfo {
+  bvid: string;
+  title: string;
+  duration: number;
+  url: string;
+}
+
 function requireReadCredential(credential: BiliCredential | null | undefined, action: string) {
   if (!credential?.cookies?.SESSDATA) {
     throw new AuthenticationError(`${action}需要登录`);
@@ -35,6 +47,17 @@ function normalizeProtocolUrl(url: string) {
     return `https:${url}`;
   }
   return url;
+}
+
+function pickBestAudioUrl(audioStreams: Array<Record<string, unknown>>) {
+  const ranked = [...audioStreams].sort((left, right) => Number(right.bandwidth ?? 0) - Number(left.bandwidth ?? 0));
+  const stream = ranked[0];
+  const url = stream?.baseUrl ?? stream?.base_url ?? stream?.url;
+  if (!url) {
+    throw new BiliCliError("无法获取音频流地址");
+  }
+
+  return normalizeProtocolUrl(String(url));
 }
 
 function parseSpacePageProfile(uid: number, html: string) {
@@ -181,6 +204,48 @@ export class BiliClient {
     return this.http.getJson("/x/web-interface/view", { bvid }, withVideoReferer(bvid, credential));
   }
 
+  async getAudioDownloadInfo(bvid: string, credential?: BiliCredential | null): Promise<AudioDownloadInfo> {
+    const view = await this.getVideoInfo(bvid, credential);
+    const cid = Number(view?.pages?.[0]?.cid ?? view?.cid ?? 0);
+    if (!cid) {
+      throw new BiliCliError(`视频 ${bvid} 缺少 cid，无法获取音频流`);
+    }
+
+    const playurl = await this.http.getJson(
+      "/x/player/playurl",
+      {
+        bvid,
+        cid,
+        fnval: 4048,
+        fnver: 0,
+        fourk: 0,
+      },
+      withVideoReferer(bvid, credential),
+    );
+
+    const audioStreams = Array.isArray(playurl?.dash?.audio) ? playurl.dash.audio : [];
+    if (audioStreams.length === 0) {
+      const fallbackUrl = playurl?.durl?.[0]?.url;
+      if (!fallbackUrl) {
+        throw new BiliCliError("无法获取音频流地址");
+      }
+
+      return {
+        bvid: String(view?.bvid ?? bvid),
+        title: String(view?.title ?? bvid),
+        duration: Number(view?.duration ?? 0),
+        url: normalizeProtocolUrl(String(fallbackUrl)),
+      };
+    }
+
+    return {
+      bvid: String(view?.bvid ?? bvid),
+      title: String(view?.title ?? bvid),
+      duration: Number(view?.duration ?? 0),
+      url: pickBestAudioUrl(audioStreams),
+    };
+  }
+
   async getVideoSummary(bvid: string, credential?: BiliCredential | null) {
     const view = await this.getVideoInfo(bvid, credential);
     const cid = view?.pages?.[0]?.cid;
@@ -279,12 +344,12 @@ export class BiliClient {
     return this.http.getJson("/x/relation/followings", { vmid: uid, pn: page, ps: pageSize }, { credential });
   }
 
-  async getHistory(pageSize = 20, credential?: BiliCredential | null) {
+  async getHistory(options: HistoryOptions, credential?: BiliCredential | null) {
     if (!credential) {
       throw new AuthenticationError("获取观看历史需要登录");
     }
 
-    return this.http.getJson("/x/web-interface/history/cursor", { ps: pageSize }, { credential });
+    return this.http.getJson("/x/v2/history", { pn: options.page, ps: options.pageSize }, { credential });
   }
 
   async getWatchLater(credential?: BiliCredential | null) {
@@ -303,12 +368,12 @@ export class BiliClient {
     return this.http.getJson("/x/polymer/web-dynamic/v1/feed/all", { type: "all", offset }, { credential });
   }
 
-  async likeVideo(bvid: string, credential: BiliCredential) {
-    const writeCredential = requireWriteCredential(credential, "点赞视频");
+  async likeVideo(bvid: string, credential: BiliCredential, undo = false) {
+    const writeCredential = requireWriteCredential(credential, undo ? "取消点赞" : "点赞视频");
     const identity = await this.resolveVideoIdentity(bvid, writeCredential);
     return this.http.postJson(
       "/x/web-interface/archive/like",
-      { ...identity, like: 1 },
+      { ...identity, like: undo ? 2 : 1 },
       withVideoReferer(bvid, writeCredential),
     );
   }

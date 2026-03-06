@@ -66,16 +66,7 @@ export class AuthService {
     return credential;
   }
 
-  async login(): Promise<{ credential: BiliCredential; method: "browser" | "qr" }> {
-    const browserCredential = await this.browserImporter.importCredential();
-    if (browserCredential) {
-      const validation = await this.validator(browserCredential, "read");
-      if (validation !== "invalid") {
-        await this.store.save(browserCredential);
-        return { credential: browserCredential, method: "browser" };
-      }
-    }
-
+  async login(): Promise<{ credential: BiliCredential; method: "qr" }> {
     const qrCredential = await this.qrLogin.login();
     await this.store.save(qrCredential);
     return { credential: qrCredential, method: "qr" };

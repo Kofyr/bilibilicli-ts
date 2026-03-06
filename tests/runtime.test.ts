@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveCredentialPath } from "../src/runtime.js";
 
 describe("resolveCredentialPath", () => {
-  it("matches the python cli credential path by default", () => {
+  it("uses the default credential path", () => {
     const original = process.env.BILI_TS_CREDENTIAL_PATH;
     delete process.env.BILI_TS_CREDENTIAL_PATH;
 

@@ -1,7 +1,9 @@
+export type CredentialSource = "saved" | "browser" | "qr";
+
 export interface BiliCredential {
   uid?: number;
   accessToken?: string;
-  source: "saved" | "browser" | "qr";
+  source: CredentialSource;
   browser?: string;
   updatedAt: string;
   cookies: Record<string, string>;

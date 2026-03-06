@@ -41,7 +41,7 @@ export class BrowserCredentialImporter implements BrowserCredentialImporterContr
       return null;
     }
 
-    const browser = cookies.get("SESSDATA")?.meta?.browser;
+    const detectedBrowser = cookies.get("SESSDATA")?.meta?.browser;
     const dedeUserId = cookies.get("DedeUserID")?.value;
     const credentialCookies = Object.fromEntries(
       Array.from(cookies.entries())
@@ -51,7 +51,7 @@ export class BrowserCredentialImporter implements BrowserCredentialImporterContr
 
     return {
       uid: dedeUserId ? Number(dedeUserId) : undefined,
-      browser: typeof browser === "string" ? browser : undefined,
+      browser: typeof detectedBrowser === "string" ? detectedBrowser : "Chrome",
       source: "browser",
       updatedAt: this.now(),
       cookies: credentialCookies,

@@ -5,6 +5,7 @@ import { AuthService } from "./core/auth/auth-service.js";
 import { BrowserCredentialImporter } from "./core/auth/browser-importer.js";
 import { CredentialStore } from "./core/auth/credential-store.js";
 import { WebQrLogin } from "./core/auth/qr-login.js";
+import { AudioService, type AudioDownloadInfo, type AudioDownloadOptions, type AudioDownloadResult } from "./core/audio.js";
 import { BiliClient } from "./core/client.js";
 import { BiliHttpClient } from "./core/http.js";
 import type { AuthMode, BiliCredential } from "./core/types.js";
@@ -18,10 +19,13 @@ export interface CliRuntime {
   auth: {
     getCredential(mode: AuthMode): Promise<BiliCredential | null>;
     requireCredential(mode: Exclude<AuthMode, "optional">): Promise<BiliCredential>;
-    login(): Promise<{ credential: BiliCredential; method: "browser" | "qr" }>;
+    login(): Promise<{ credential: BiliCredential; method: "qr" }>;
     logout(): Promise<void>;
   };
   api: BiliClient;
+  audio: {
+    download(info: AudioDownloadInfo, options: AudioDownloadOptions): Promise<AudioDownloadResult>;
+  };
   io: CliIo;
 }
 
@@ -35,10 +39,11 @@ export function resolveCredentialPath() {
 }
 
 export function createDefaultRuntime(): CliRuntime {
+  const credentialPath = resolveCredentialPath();
   const http = new BiliHttpClient();
   const api = new BiliClient(http);
   const auth = new AuthService({
-    store: new CredentialStore(resolveCredentialPath()),
+    store: new CredentialStore(credentialPath),
     browserImporter: new BrowserCredentialImporter(),
     qrLogin: new WebQrLogin({ http }),
     validator: (credential, mode) => {
@@ -53,6 +58,7 @@ export function createDefaultRuntime(): CliRuntime {
   return {
     auth,
     api,
+    audio: new AudioService(),
     io: {
       write: (value) => {
         process.stdout.write(value);

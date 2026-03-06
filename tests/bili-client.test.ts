@@ -85,12 +85,14 @@ describe("BiliClient", () => {
     const postJson = vi
       .fn()
       .mockResolvedValueOnce({ like: 1 })
+      .mockResolvedValueOnce({ like: 0 })
       .mockResolvedValueOnce({ multiply: 1 })
       .mockResolvedValueOnce({ like: true, coin: true, fav: true })
       .mockResolvedValueOnce({ status: "ok" });
     const client = new BiliClient({ getJson, getSignedJson: vi.fn(), getText: vi.fn(), postJson, postJsonBody: vi.fn() });
 
     await expect(client.likeVideo("BV1ABcsztEcY", credential)).resolves.toEqual({ like: 1 });
+    await expect(client.likeVideo("BV1ABcsztEcY", credential, true)).resolves.toEqual({ like: 0 });
     await expect(client.coinVideo("BV1ABcsztEcY", credential)).resolves.toEqual({ multiply: 1 });
     await expect(client.tripleVideo("BV1ABcsztEcY", credential)).resolves.toEqual({ like: true, coin: true, fav: true });
     await expect(client.unfollowUser(946974, credential)).resolves.toEqual({ status: "ok" });
@@ -103,18 +105,24 @@ describe("BiliClient", () => {
     );
     expect(postJson).toHaveBeenNthCalledWith(
       2,
+      "/x/web-interface/archive/like",
+      { aid: 123, bvid: "BV1ABcsztEcY", like: 2 },
+      expect.anything(),
+    );
+    expect(postJson).toHaveBeenNthCalledWith(
+      3,
       "/x/web-interface/coin/add",
       { aid: 123, bvid: "BV1ABcsztEcY", multiply: 1, select_like: 0 },
       expect.anything(),
     );
     expect(postJson).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/x/web-interface/archive/like/triple",
       { aid: 123, bvid: "BV1ABcsztEcY" },
       expect.anything(),
     );
     expect(postJson).toHaveBeenNthCalledWith(
-      4,
+      5,
       "/x/relation/modify",
       { fid: 946974, act: 2, re_src: 11 },
       expect.anything(),
@@ -139,7 +147,16 @@ describe("BiliClient", () => {
     );
   });
 
-  it("posts text dynamics and deletes them through python parity endpoints", async () => {
+  it("uses the old paged history endpoint with page and count", async () => {
+    const getJson = vi.fn().mockResolvedValue([{ bvid: "BV1ABcsztEcY", title: "测试视频" }]);
+    const client = new BiliClient({ getJson, getSignedJson: vi.fn(), getText: vi.fn(), postJson: vi.fn(), postJsonBody: vi.fn() });
+
+    await expect(client.getHistory({ page: 2, pageSize: 15 }, credential)).resolves.toEqual([{ bvid: "BV1ABcsztEcY", title: "测试视频" }]);
+
+    expect(getJson).toHaveBeenCalledWith("/x/v2/history", { pn: 2, ps: 15 }, { credential });
+  });
+
+  it("posts text dynamics and deletes them through the dynamic endpoints", async () => {
     const dynamicId = "1176582818784870400";
     const getJson = vi.fn();
     const postJson = vi.fn().mockResolvedValueOnce({ dynamic_id: 1001 });
@@ -171,5 +188,41 @@ describe("BiliClient", () => {
 
     await expect(client.coinVideo("BV1ABcsztEcY", credential, 3)).rejects.toThrow("投币数量只能是 1 或 2");
     await expect(client.postTextDynamic("   ", credential)).rejects.toThrow("动态文本不能为空");
+  });
+
+  it("resolves an audio download url from playurl dash audio streams", async () => {
+    const getJson = vi
+      .fn()
+      .mockResolvedValueOnce({
+        aid: 123,
+        bvid: "BV1ABcsztEcY",
+        cid: 99,
+        title: "测试视频",
+        duration: 120,
+        pages: [{ cid: 99 }],
+      })
+      .mockResolvedValueOnce({
+        dash: {
+          audio: [
+            { baseUrl: "https://example.com/audio-64k.m4s", bandwidth: 64000 },
+            { baseUrl: "https://example.com/audio-128k.m4s", bandwidth: 128000 },
+          ],
+        },
+      });
+    const client = new BiliClient({ getJson, getSignedJson: vi.fn(), getText: vi.fn(), postJson: vi.fn(), postJsonBody: vi.fn() });
+
+    await expect(client.getAudioDownloadInfo("BV1ABcsztEcY", credential)).resolves.toEqual({
+      bvid: "BV1ABcsztEcY",
+      duration: 120,
+      title: "测试视频",
+      url: "https://example.com/audio-128k.m4s",
+    });
+    expect(getJson).toHaveBeenNthCalledWith(1, "/x/web-interface/view", { bvid: "BV1ABcsztEcY" }, expect.anything());
+    expect(getJson).toHaveBeenNthCalledWith(
+      2,
+      "/x/player/playurl",
+      expect.objectContaining({ bvid: "BV1ABcsztEcY", cid: 99, fnval: 4048 }),
+      expect.anything(),
+    );
   });
 });

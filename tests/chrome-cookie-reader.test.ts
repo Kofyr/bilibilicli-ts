@@ -24,7 +24,7 @@ describe("createChromeCookieQuery", () => {
     expect(getCookiesPromised).toHaveBeenCalledWith("https://www.bilibili.com/", "object");
   });
 
-  it("queries multiple bilibili subdomains to match python browser extraction", async () => {
+  it("queries multiple bilibili subdomains for browser cookie extraction", async () => {
     const getCookiesPromised = vi.fn().mockImplementation(async (url: string) => {
       if (url === "https://www.bilibili.com/") {
         return { SESSDATA: "sess", bili_jct: "csrf", DedeUserID: "123" };

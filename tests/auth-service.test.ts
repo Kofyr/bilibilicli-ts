@@ -53,14 +53,25 @@ describe("AuthService", () => {
     expect(store.save).toHaveBeenCalledWith(browserCredential);
   });
 
-  it("uses browser cookies first for explicit login before qr fallback", async () => {
+  it("uses qr login for explicit login", async () => {
+    const qrCredential: BiliCredential = {
+      uid: 9,
+      source: "qr",
+      updatedAt: "2026-03-06T00:00:00.000Z",
+      cookies: { SESSDATA: "qr", bili_jct: "csrf" },
+    };
+    const qrLogin = { login: vi.fn().mockResolvedValue(qrCredential) };
     const service = new AuthService({
       store: { load: vi.fn(), save: vi.fn(), clear: vi.fn() },
       browserImporter: { importCredential: vi.fn().mockResolvedValue(browserCredential) },
-      qrLogin: { login: vi.fn().mockResolvedValue(savedCredential) },
+      qrLogin,
       validator: vi.fn().mockResolvedValue("valid"),
     });
 
-    await expect(service.login()).resolves.toMatchObject({ credential: browserCredential, method: "browser" });
+    await expect(service.login()).resolves.toMatchObject({
+      credential: qrCredential,
+      method: "qr",
+    });
+    expect(qrLogin.login).toHaveBeenCalledTimes(1);
   });
 });
